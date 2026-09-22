@@ -1,0 +1,11 @@
+# Requirements for FCKT Three-Innovations ABSA Joint Model
+# Python >= 3.6 required
+
+# Core deep learning framework
+torch>=1.0.0
+
+# Numerical computation
+numpy>=1.16.0
+
+# Python 2/3 compatibility (required by squad_utils.py)
+six>=1.12.0
