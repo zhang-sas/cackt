@@ -1,65 +1,65 @@
-# FCKT Three-Innovations: Joint Aspect Extraction & Sentiment Classification
 
-基于 BERT 的 ABSA（Aspect-Based Sentiment Analysis）联合模型，在原始 FCKT 框架上实现了三个创新改进，提升 aspect 召回率和情感分类准确度。
+FCKT Three-Innovations: Joint Aspect Extraction & Sentiment Classification
 
-## 三个创新点
+A BERT-based ABSA (Aspect-Based Sentiment Analysis) joint model that implements three innovative improvements on the original FCKT framework, enhancing aspect recall and sentiment classification accuracy.
 
-### 1. 置信度感知软候选迁移 (Confidence-Aware Soft Candidate Transfer)
+Three Innovations
 
-替代 FCKT 原始的硬阈值 heuristic extraction，通过置信度感知的软候选迁移提高 aspect recall，减少候选被误删。
+Confidence-Aware Soft Candidate Transfer
 
-- 修复 `span_annotate_candidates` 中的候选排序 key
-- 不再依赖固定 `logit_threshold=7.5`，新增动态阈值（`--candidate_threshold_mode dynamic`）
-- 保留 top-K 候选 span，每个 span 附有 confidence 分数
-- 情感分类 loss 按 candidate confidence 加权
-- gold span 的 confidence 固定为 1.0，pseudo span 按动态阈值校准
+Replaces FCKT's original hard-threshold heuristic extraction with confidence-aware soft candidate transfer to improve aspect recall and reduce the erroneous deletion of candidates.
 
-### 2. 情感条件化边界抽取 (Sentiment-Conditioned Boundary Extraction)
+Fixed the candidate sorting key in span_annotate_candidates
+No longer relies on the fixed logit_threshold=7.5; added a dynamic threshold (--candidate_threshold_mode dynamic)
+Retains top-K candidate spans, each accompanied by a confidence score
+Sentiment classification loss is weighted by candidate confidence
+Gold span confidence is fixed at 1.0, while pseudo spans are calibrated according to the dynamic threshold
 
-让 sentiment 反向约束 Aspect Extraction，而不是只让 AE 服务 SP。
+Sentiment-Conditioned Boundary Extraction
 
-- 定义三个 sentiment prototypes：**neutral**、**positive**、**negative**
-- 对每个 token 计算 sentiment-aware start/end score
-- 生成 sentiment-specific span candidates
-- 最终输出 `(aspect, sentiment)`，而非先 aspect 后 sentiment
-- 支持 `--use_sentiment_conditioned_boundary` 和 `--sentiment_prior_weight` 控制
+Allows sentiment to inversely constrain Aspect Extraction (AE), rather than having AE solely serve Sentiment Prediction (SP).
 
-### 3. 边界感知难负样本对比学习 (Boundary-Aware Hard Negative Contrastive Learning)
+Defines three sentiment prototypes: neutral, positive, and negative
+Calculates sentiment-aware start/end scores for each token
+Generates sentiment-specific span candidates
+Outputs (aspect, sentiment) jointly, rather than extracting aspect first and then classifying sentiment
+Controlled via --use_sentiment_conditioned_boundary and --sentiment_prior_weight
 
-替代原随机负样本 token contrastive learning，让对比学习针对边界混淆和同类异情感问题。
+Boundary-Aware Hard Negative Contrastive Learning
 
-- **正样本**：gold span 内 start-end / span-sentiment
-- **难负样本**：重叠错误 span、同句其他 aspect、同类异情感 aspect
-- 使用确定性 Boundary-aware Hard Negative InfoNCE，不再随机抽样
-- 修复 `squeeze` 在 batch_size=1 时的维度挤压问题（改为 `squeeze(-1)`）
-- 通过 `--weight_span` 控制权重
+Replaces the original random negative token contrastive learning, targeting boundary confusion and same-aspect-different-sentiment issues.
 
-## 项目结构
+Positive samples: start-end / span-sentiment pairs within gold spans
+Hard negative samples: overlapping incorrect spans, other aspects in the same sentence, or aspects with the same text but different sentiments
+Uses deterministic Boundary-aware Hard Negative InfoNCE, eliminating random sampling
+Fixed the dimension squeezing issue with squeeze when batch_size=1 (changed to squeeze(-1))
+Weight controlled via --weight_span
 
-```
+Project Structure
+
 fckt_three_innovations/
-├── absa/                           # ABSA 任务核心模块
-│   ├── __init__.py
-│   ├── utils.py                    # 数据读取/候选span生成/置信度标注 ★
-│   ├── run_base.py                 # 基础训练工具（optimizer/参数加载）
-│   ├── run_cls_span.py             # 评估函数（eval_absa, eval_ac）
-│   ├── run_joint.py                # 联合训练主入口 ★
-│   └── run_extract_span.py         # Aspect extraction 独立入口
+├── absa/                           # Core modules for ABSA tasks
+│   ├── init.py
+│   ├── utils.py                    # Data loading / candidate span generation / confidence annotation ★
+│   ├── run_base.py                 # Basic training utilities (optimizer / parameter loading)
+│   ├── run_cls_span.py             # Evaluation functions (eval_absa, eval_ac)
+│   ├── run_joint.py                # Main entry point for joint training ★
+│   └── run_extract_span.py         # Independent entry point for Aspect Extraction
 │
-├── bert/                           # 自定义 BERT 模型模块
-│   ├── __init__.py
-│   ├── modeling.py                 # BertModel / BertConfig（基于 Google BERT）
-│   ├── sentiment_modeling.py       # 情感条件化边界 + 对比loss + prototypes ★
-│   ├── optimization.py             # BERT 优化器（AdamW + warmup）
-│   ├── dynamic_rnn.py              # 动态 LSTM 层
+├── bert/                           # Custom BERT model modules
+│   ├── init.py
+│   ├── modeling.py                 # BertModel / BertConfig (based on Google BERT)
+│   ├── sentiment_modeling.py       # Sentiment-conditioned boundary + contrastive loss + prototypes ★
+│   ├── optimization.py             # BERT optimizer (AdamW + warmup)
+│   ├── dynamic_rnn.py              # Dynamic LSTM layer
 │   └── tokenization.py             # BERT tokenizer
 │
-├── squad/                          # SQuAD 评估工具（复用于 span 抽取）
-│   ├── __init__.py
-│   ├── squad_utils.py              # Span 后处理（best_indexes, final_text）
-│   └── squad_evaluate.py           # Exact match / F1 评分
+├── squad/                          # SQuAD evaluation tools (reused for span extraction)
+│   ├── init.py
+│   ├── squad_utils.py              # Span post-processing (best_indexes, final_text)
+│   └── squad_evaluate.py           # Exact match / F1 scoring
 │
-├── data/                           # 数据集
+├── data/                           # Datasets
 │   └── absa/
 │       ├── laptop14_train.txt / laptop14_test.txt
 │       ├── rest_total_train.txt / rest_total_test.txt
@@ -67,58 +67,53 @@ fckt_three_innovations/
 │       ├── split_twitter1_train.txt ... split_twitter10_train.txt
 │       └── length_split_*.txt
 │
-├── bert-base-uncased/              # BERT-base 预训练权重（12层, 768维）
+├── bert-base-uncased/              # BERT-base pre-trained weights (12 layers, 768 dims)
 │   ├── bert_config.json / config.json
 │   ├── pytorch_model.bin
 │   ├── model.safetensors
 │   ├── vocab.txt
 │   └── tokenizer.json / tokenizer_config.json
 │
-├── bert-large-uncased/             # BERT-large 预训练权重（24层, 1024维）
+├── bert-large-uncased/             # BERT-large pre-trained weights (24 layers, 1024 dims)
 │   ├── config.json
 │   ├── pytorch_model.bin
 │   ├── vocab.txt
 │   └── tokenizer.json / tokenizer_config.json
 │
-├── run.py                          # Grid runner 实验入口（支持多参数组合）
-├── run_twitter_sensitivity.py      # Twitter 敏感度分析
+├── run.py                          # Grid runner experiment entry (supports multiple parameter combinations)
+├── run_twitter_sensitivity.py      # Twitter sensitivity analysis
 │
-├── requirements.txt                # Python 依赖
-└── README.md                       # 本文件
-```
+├── requirements.txt                # Python dependencies
+└── README.md                       # This file
 
-> ★ 标记的文件是本次三个创新点的核心修改文件。
+★ Files marked with a star are the core modified files for the three innovations.
 
-## 环境要求
+Requirements
+Dependency   Version   Description
+Python   ≥ 3.6   Uses f-strings and type hints
 
-| 依赖 | 版本 | 说明 |
-|------|------|------|
-| Python | ≥ 3.6 | 使用 f-string 和 type hints |
-| PyTorch | ≥ 1.0.0 | 深度学习框架 |
-| NumPy | ≥ 1.16.0 | 数值计算 |
-| Six | ≥ 1.12.0 | Python 2/3 兼容层 |
-| CUDA | 推荐 10.0+ | GPU 加速（可选，支持 `--no_cuda`） |
-| 磁盘空间 | ~5 GB | 两个 BERT 模型 + 数据集 |
+PyTorch   ≥ 1.0.0   Deep learning framework
 
-### 安装
+NumPy   ≥ 1.16.0   Numerical computing
 
-```bash
-# 1. 克隆或解压项目
+Six   ≥ 1.12.0   Python 2/3 compatibility layer
+
+CUDA   Recommended 10.0+   GPU acceleration (optional, supports --no_cuda)
+
+Disk Space   ~5 GB   Two BERT models + datasets
+
+Installation
+
+Clone or unzip the project
 cd fckt_three_innovations
 
-# 2. 安装依赖
+Install dependencies
 pip install -r requirements.txt
 
-# 3. 验证环境
+Verify environment
 python -m compileall -q .
 python -m absa.run_joint --help
-```
 
+Quick Start
 
-## 快速开始
-
-
-```bash
 python run.py
-
-
